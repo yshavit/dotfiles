@@ -1,0 +1,184 @@
+# Interactive-shell configuration: aliases, keybindings, completion, plugins,
+# prompt.
+#
+# Sourced from ~/.zshrc, which stays local and untracked so that tools which
+# rewrite dotfiles (Rancher Desktop and friends) cannot dirty this repo. PATH
+# and exported environment live in the companion `zprofile`, which has already
+# run by the time we get here, so everything below may assume a complete PATH.
+#
+# Nothing here installs software. A shell that runs `brew install` on startup
+# is its own kind of problem; see README.md for what to install by hand.
+
+# ---------------------------------------------------------------------------
+# helpers
+# ---------------------------------------------------------------------------
+
+# Source the first candidate that exists and ignore the rest. Plugin locations
+# vary by Homebrew prefix and install method, so each caller below lists the
+# places its plugin realistically lands. Left defined on purpose: the local
+# ~/.zshrc may want it too.
+_dotfiles_source_first() {
+  local candidate
+  for candidate in "$@"; do
+    if [[ -r "$candidate" ]]; then
+      source "$candidate"
+      return 0
+    fi
+  done
+  return 1
+}
+
+# fzf's shell integration, as a function because it has to be called at a
+# specific moment further down rather than here. Gives Ctrl-R fuzzy history
+# search, Ctrl-T fuzzy file picker, Alt-C fuzzy cd, and `**<TAB>` completion.
+# Alt-C needs the terminal to send Meta on Option: in iTerm2 that is
+# Profiles > Keys > Left Option key > Esc+.
+_dotfiles_init_fzf() {
+  command -v fzf >/dev/null 2>&1 && eval "$(fzf --zsh)"
+}
+
+# ---------------------------------------------------------------------------
+# aliases
+# ---------------------------------------------------------------------------
+
+# Find by name, skipping the two directories that otherwise dominate results.
+alias fn="find . -not -path '*/node_modules*/' -not -path '*/.yarn/*' -name"
+
+# Long listing, oldest last. eza where available, plain ls as the fallback.
+if command -v eza >/dev/null 2>&1; then
+  alias ll='eza -s modified -l --smart-group --modified --no-user --no-permissions --time-style long-iso --classify --git --color=always'
+else
+  alias ll='ls -lhtr'
+fi
+
+# ---------------------------------------------------------------------------
+# completion
+# ---------------------------------------------------------------------------
+
+autoload -Uz compinit
+# A bare `compinit` rescans every function in $fpath and is usually the single
+# largest chunk of zsh startup time, so only do the full scan when the dump is
+# missing or over a day old. Two subtleties: the glob has to happen in an array
+# assignment, because `[[ ... ]]` does not perform filename generation and
+# testing the pattern there would silently always succeed; and the qualifiers
+# are written bare rather than as (#q...), because the (#q...) form requires
+# extended_glob, which is deliberately not set. Qualifiers: N = no error when
+# nothing matches, . = plain files only, mh-24 = modified under 24 hours ago.
+_zcompdump_fresh=( ${ZDOTDIR:-$HOME}/.zcompdump(N.mh-24) )
+if (( ${#_zcompdump_fresh} )); then
+  compinit -C   # dump is fresh: load it without re-checking $fpath
+else
+  compinit      # dump is missing or stale: rebuild it
+fi
+unset _zcompdump_fresh
+
+# Keep git's ORIG_HEAD out of ref completion. Git writes .git/ORIG_HEAD on
+# every merge, rebase, reset and pull, and never cleans it up, so after the
+# first rebase in a repo it clutters `git checkout <TAB>` forever and turns
+# otherwise-unique completions ambiguous. https://stackoverflow.com/a/14325591
+zstyle ':completion:*:*' ignored-patterns '*ORIG_HEAD'
+
+# ---------------------------------------------------------------------------
+# command-line editing
+# ---------------------------------------------------------------------------
+
+# Widget that opens the current command line in $EDITOR. Bound to `v` below, so
+# it has to be registered before the vi-mode hooks that reference it.
+autoload -Uz edit-command-line
+zle -N edit-command-line
+
+# ---------------------------------------------------------------------------
+# vi mode (zsh-vi-mode)
+# ---------------------------------------------------------------------------
+# A fuller vi mode than zsh's built-in one: text objects, surround, a real
+# visual mode. Install with `brew install zsh-vi-mode`.
+
+# Initialise at sourcing time instead of on the first command line. This is for
+# zsh-syntax-highlighting at the bottom of this file: that plugin wraps ZLE
+# widgets when it is sourced, and zsh-vi-mode creates its widgets when it
+# initialises. Left on the default, zsh-vi-mode would initialise after
+# highlighting had already wrapped, leaving its widgets unwrapped and
+# highlighting broken inside vi mode. Initialising eagerly here means the
+# widgets exist before highlighting goes looking for them. If highlighting
+# still misbehaves, the other remedy is to source it *before* zsh-vi-mode.
+ZVM_INIT_MODE=sourcing
+
+# Consequence of the line above: "after init" now happens during the `source`
+# call below, so any hook that must run after initialisation has to be defined
+# before it. That is what this is.
+function zvm_after_init() {
+  # fzf binds Ctrl-R and Ctrl-T in insert mode, which zsh-vi-mode's own keymap
+  # setup would otherwise clobber.
+  _dotfiles_init_fzf
+}
+
+# vicmd and visual bindings go through a separate mechanism: zsh-vi-mode
+# postpones them until the first time you enter normal mode
+# (ZVM_LAZY_KEYBINDINGS, on by default), regardless of the init mode set above.
+# So these belong in the lazy hook, not in zvm_after_init.
+function zvm_after_lazy_keybindings() {
+  zvm_bindkey vicmd 'v'  edit-command-line   # open the line in $EDITOR
+  zvm_bindkey vicmd ';'  end-of-line
+  zvm_bindkey vicmd '^I' vi-first-non-blank  # ^I is <Tab>
+}
+
+# Candidates, in order: Homebrew's share directory (the normal case, prefix
+# /opt/homebrew on Apple Silicon or /usr/local on Intel), Homebrew's versioned
+# opt path, a hardcoded Intel prefix for shells where zprofile did not run and
+# HOMEBREW_PREFIX is therefore unset, and finally a manual git clone.
+if _dotfiles_source_first \
+  "${HOMEBREW_PREFIX:-/opt/homebrew}/share/zsh-vi-mode/zsh-vi-mode.plugin.zsh" \
+  "${HOMEBREW_PREFIX:-/opt/homebrew}/opt/zsh-vi-mode/share/zsh-vi-mode/zsh-vi-mode.plugin.zsh" \
+  /usr/local/share/zsh-vi-mode/zsh-vi-mode.plugin.zsh \
+  "$HOME/manual_installs/zsh-vi-mode/zsh-vi-mode.plugin.zsh"
+then
+  : # zvm_after_init has already run during the source, starting fzf
+else
+  # No zsh-vi-mode here, so nothing has started fzf yet.
+  _dotfiles_init_fzf
+fi
+
+# ---------------------------------------------------------------------------
+# zsh-autosuggestions
+# ---------------------------------------------------------------------------
+# Greys in a suggested completion from your history as you type; right-arrow
+# accepts it. Install with `brew install zsh-autosuggestions`. Candidate paths
+# as described above.
+_dotfiles_source_first \
+  "${HOMEBREW_PREFIX:-/opt/homebrew}/share/zsh-autosuggestions/zsh-autosuggestions.zsh" \
+  "${HOMEBREW_PREFIX:-/opt/homebrew}/opt/zsh-autosuggestions/share/zsh-autosuggestions/zsh-autosuggestions.zsh" \
+  /usr/local/share/zsh-autosuggestions/zsh-autosuggestions.zsh
+
+# ---------------------------------------------------------------------------
+# prompt
+# ---------------------------------------------------------------------------
+# starship; its configuration is ../starship/starship.toml. PATH is complete by
+# now because zprofile ran first, which matters because prompt modules shell
+# out to other tools.
+if command -v starship >/dev/null 2>&1; then
+  eval "$(starship init zsh)"
+fi
+
+# ---------------------------------------------------------------------------
+# iTerm2 shell integration
+# ---------------------------------------------------------------------------
+# Marks prompt boundaries so iTerm2 can jump between commands, annotate output
+# and so on. Installed by iTerm2 itself, hence the guard.
+if [[ -r "$HOME/.iterm2_shell_integration.zsh" ]]; then
+  source "$HOME/.iterm2_shell_integration.zsh"
+fi
+
+# ---------------------------------------------------------------------------
+# zsh-syntax-highlighting
+# ---------------------------------------------------------------------------
+# Colours the command line as you type: unknown commands red, quoted strings,
+# paths that actually exist. Install with `brew install
+# zsh-syntax-highlighting`. Must be sourced LAST, because it wraps the ZLE
+# widgets defined up to this point -- which is also why ZVM_INIT_MODE is set
+# above. The trailing `|| :` keeps a missing plugin from making this whole file
+# return non-zero.
+_dotfiles_source_first \
+  "${HOMEBREW_PREFIX:-/opt/homebrew}/share/zsh-syntax-highlighting/zsh-syntax-highlighting.zsh" \
+  "${HOMEBREW_PREFIX:-/opt/homebrew}/opt/zsh-syntax-highlighting/share/zsh-syntax-highlighting/zsh-syntax-highlighting.zsh" \
+  /usr/local/share/zsh-syntax-highlighting/zsh-syntax-highlighting.zsh \
+  || :

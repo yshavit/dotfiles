@@ -1,0 +1,68 @@
+# Login-shell configuration: PATH and exported environment only.
+#
+# Sourced from ~/.zprofile, which stays local and untracked so that tools which
+# rewrite dotfiles cannot dirty this repo. Interactive settings -- aliases,
+# keybindings, completion, prompt, plugins -- live in the companion `zshrc`.
+#
+# Why here and not ~/.zshenv: this runs after /etc/zprofile, which invokes
+# macOS's path_helper. path_helper rebuilds PATH from /etc/paths and
+# /etc/paths.d and appends whatever was already set, so edits made here land
+# after it and survive. The same edits in ~/.zshenv would be reshuffled, with
+# /usr/bin pushed back in front of everything we add.
+
+# Keep PATH de-duplicated. This file prepends on every login shell, and login
+# shells nest freely on macOS: every iTerm2 tab is one, as are tmux panes, the
+# VS Code terminal, and any explicit `zsh -l`.
+typeset -U path PATH
+
+# Homebrew. `brew shellenv` sets HOMEBREW_PREFIX and friends, and puts brew's
+# bin ahead of /usr/bin. That ordering is the point: without it any brew
+# formula sharing a name with a system binary is shadowed. The visible case is
+# `openssl`, where macOS ships LibreSSL and you silently get that instead of
+# Homebrew's OpenSSL 3. Apple Silicon prefix first, then Intel.
+for _brew in /opt/homebrew/bin/brew /usr/local/bin/brew; do
+  if [[ -x "$_brew" ]]; then
+    eval "$("$_brew" shellenv)"
+    break
+  fi
+done
+unset _brew
+
+# Personal scripts, ahead of packaged tools so they can deliberately shadow
+# them. Intentionally unguarded: a non-existent PATH entry is inert, and these
+# are directories that tend to get created later on a machine that lacks them
+# today.
+path=("$HOME/bin" "$HOME/.devcontainers/bin" $path)
+
+# Tool-installed user binaries (uv, pipx, claude). Appended, so that packaged
+# tools win a name collision.
+path=($path "$HOME/.local/bin")
+
+export PATH
+
+# Editor, preferring neovim where it exists.
+if command -v nvim >/dev/null 2>&1; then
+  export EDITOR=nvim
+else
+  export EDITOR=vim
+fi
+
+# Colourised `ls`. This, not a --color alias, is what BSD/macOS ls responds to
+# (BSD ls has no --color flag and errors on it).
+export CLICOLOR=1
+
+# less: F quit if the content fits one screen, R pass ANSI colour escapes
+# through raw (without it `git diff | less` shows raw escape codes), X skip
+# termcap init/deinit so output stays in the scrollback after quitting.
+export LESS=FRX
+
+# Colourised man pages. man renders bold and underline as termcap escapes;
+# these override the sequences less emits for them. md = bold -> orange
+# (headers, command names), us = underline -> blue (parameters), mb = blink ->
+# red. The me/ue/se trio are the corresponding resets.
+export LESS_TERMCAP_mb=$'\E[01;31m'
+export LESS_TERMCAP_md=$'\E[01;38;5;208m'
+export LESS_TERMCAP_me=$'\E[0m'
+export LESS_TERMCAP_ue=$'\E[0m'
+export LESS_TERMCAP_us=$'\E[04;38;5;111m'
+export LESS_TERMCAP_se=$'\E[0m'

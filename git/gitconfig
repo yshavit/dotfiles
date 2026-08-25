@@ -1,0 +1,48 @@
+[color]
+	ui = true
+[core]
+  pager = delta
+  ignorecase = false
+	autocrlf = false
+[merge]
+  ff = only
+[alias]
+  co = checkout
+[pull]
+  rebase = true
+[interactive]
+  diffFilter = delta --color-only
+[push]
+	default = current
+[filter "lfs"]
+	clean = git-lfs clean -- %f
+	smudge = git-lfs smudge -- %f
+	process = git-lfs filter-process
+	required = true
+[tig]
+  line-graphics = utf-8
+  commit-order = topo
+  main-view-id = yes
+  main-view-date-display = relative-compact
+[rerere]
+	enabled = true
+[init]
+	defaultBranch = main
+[remote "origin"]
+	prune = true
+
+[interactive]
+    diffFilter = delta --color-only
+[delta]
+    navigate = true    # use n and N to move between diff sections
+    light = false      # set to true if you're in a terminal w/ a light background color (e.g. the default macOS terminal)
+[merge]
+    conflictstyle = diff3
+[diff]
+    colorMoved = default
+    tool = difftastic
+[difftool]
+    prompt = false
+
+[pager]
+    difftool = true
