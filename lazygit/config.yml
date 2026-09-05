@@ -1,5 +1,8 @@
 git:
-  pagers:
-    - pager: delta --dark --paging=never
+  diffRenderers:
+    - command: delta --dark --paging=never --line-numbers
+      name: unified
+    - command: delta --dark --paging=never --line-numbers --side-by-side
+      name: side-by-side
   commit:
     autoWrapCommitMessage: true
