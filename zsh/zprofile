@@ -11,7 +11,7 @@
 # /usr/bin pushed back in front of everything we add.
 
 # Keep PATH de-duplicated. This file prepends on every login shell, and login
-# shells nest freely on macOS: every iTerm2 tab is one, as are tmux panes, the
+# shells nest freely on macOS: every terminal tab is one, as are tmux panes, the
 # VS Code terminal, and any explicit `zsh -l`.
 typeset -U path PATH
 

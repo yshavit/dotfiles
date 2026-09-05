@@ -30,11 +30,21 @@ _dotfiles_source_first() {
 
 # fzf's shell integration, as a function because it has to be called at a
 # specific moment further down rather than here. Gives Ctrl-R fuzzy history
-# search, Ctrl-T fuzzy file picker, Alt-C fuzzy cd, and `**<TAB>` completion.
-# Alt-C needs the terminal to send Meta on Option: in iTerm2 that is
-# Profiles > Keys > Left Option key > Esc+.
+# search, Ctrl-T fuzzy file picker and Alt-C fuzzy cd. Alt-C needs the terminal
+# to send Meta on Option; in Ghostty that is `macos-option-as-alt = true`.
+#
+# `fzf --zsh` also rebinds Tab to fzf-completion, fzf's `**<TAB>` trigger, and
+# we hand Tab straight back. ghost-complete grabs Tab at the PTY layer to
+# accept its own suggestion and forwards the ones it does not use, so leaving
+# fzf on Tab means a full-screen fzf picker opening underneath
+# ghost-complete's overlay with both drawing over each other. Giving Tab to
+# plain zsh completion makes the fallthrough a quiet one. Rebound in whatever
+# keymap fzf just bound (viins under zsh-vi-mode), hence the bare `bindkey`.
+# The other three bindings are untouched.
 _dotfiles_init_fzf() {
-  command -v fzf >/dev/null 2>&1 && eval "$(fzf --zsh)"
+  command -v fzf >/dev/null 2>&1 || return
+  eval "$(fzf --zsh)"
+  bindkey '^I' expand-or-complete
 }
 
 # ---------------------------------------------------------------------------
@@ -139,15 +149,16 @@ else
 fi
 
 # ---------------------------------------------------------------------------
-# zsh-autosuggestions
+# inline suggestions
 # ---------------------------------------------------------------------------
-# Greys in a suggested completion from your history as you type; right-arrow
-# accepts it. Install with `brew install zsh-autosuggestions`. Candidate paths
-# as described above.
-_dotfiles_source_first \
-  "${HOMEBREW_PREFIX:-/opt/homebrew}/share/zsh-autosuggestions/zsh-autosuggestions.zsh" \
-  "${HOMEBREW_PREFIX:-/opt/homebrew}/opt/zsh-autosuggestions/share/zsh-autosuggestions/zsh-autosuggestions.zsh" \
-  /usr/local/share/zsh-autosuggestions/zsh-autosuggestions.zsh
+# Deliberately nothing here. zsh-autosuggestions used to live in this slot,
+# greying in a completion from history as you type. ghost-complete now does
+# that job, from history plus command specs, and the two cannot share a
+# screen: zsh-autosuggestions writes its grey text into the real line buffer
+# while ghost-complete paints an overlay from outside the shell, both in the
+# cells to the right of the cursor and neither aware of the other. The result
+# is stray grey text and a cursor a column out. If ghost-complete ever goes,
+# bring zsh-autosuggestions back rather than doing without.
 
 # ---------------------------------------------------------------------------
 # prompt
@@ -157,15 +168,6 @@ _dotfiles_source_first \
 # out to other tools.
 if command -v starship >/dev/null 2>&1; then
   eval "$(starship init zsh)"
-fi
-
-# ---------------------------------------------------------------------------
-# iTerm2 shell integration
-# ---------------------------------------------------------------------------
-# Marks prompt boundaries so iTerm2 can jump between commands, annotate output
-# and so on. Installed by iTerm2 itself, hence the guard.
-if [[ -r "$HOME/.iterm2_shell_integration.zsh" ]]; then
-  source "$HOME/.iterm2_shell_integration.zsh"
 fi
 
 # ---------------------------------------------------------------------------
