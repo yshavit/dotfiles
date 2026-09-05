@@ -1,3 +1,4 @@
+# on Macs: symlink this to $HOME/Library/Application Support/lazygit/config.yml
 git:
   diffRenderers:
     - command: delta --dark --paging=never --line-numbers
